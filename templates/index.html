@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document Comparison Tool</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 1.1em;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 40px;
+      }
+
+      .upload-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 30px;
+      }
+
+      .file-upload {
+        border: 3px dashed #667eea;
+        border-radius: 15px;
+        padding: 30px;
+        text-align: center;
+        transition: all 0.3s ease;
+        background: #f8f9ff;
+      }
+
+      .file-upload:hover {
+        border-color: #764ba2;
+        background: #f0f2ff;
+      }
+
+      .file-upload.dragover {
+        border-color: #764ba2;
+        background: #e8ebff;
+        transform: scale(1.02);
+      }
+
+      .file-upload input[type="file"] {
+        display: none;
+      }
+
+      .file-upload label {
+        display: block;
+        cursor: pointer;
+        font-size: 1.1em;
+        color: #667eea;
+        font-weight: 600;
+      }
+
+      .file-upload .icon {
+        font-size: 3em;
+        margin-bottom: 15px;
+        color: #667eea;
+      }
+
+      .file-info {
+        margin-top: 15px;
+        padding: 10px;
+        background: #e8f4fd;
+        border-radius: 8px;
+        display: none;
+      }
+
+      .buttons {
+        text-align: center;
+        margin: 30px 0;
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        font-size: 1.1em;
+        border-radius: 25px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 0 10px;
+        font-weight: 600;
+      }
+
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .btn-secondary {
+        background: #6c757d;
+      }
+
+      .status {
+        text-align: center;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 10px;
+        display: none;
+      }
+
+      .status.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      .status.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
+      .status.info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+
+      .results {
+        margin-top: 30px;
+        display: none;
+      }
+
+      .results-header {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+        border-bottom: 2px solid #667eea;
+      }
+
+      .results-content {
+        background: white;
+        padding: 30px;
+        border-radius: 0 0 10px 10px;
+        border: 1px solid #e9ecef;
+        max-height: 600px;
+        overflow-y: auto;
+      }
+
+      .doc-summary {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+
+      .summary-card {
+        background: #f8f9ff;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+      }
+
+      .comparison-text {
+        line-height: 1.6;
+        white-space: pre-wrap;
+        font-family: "Georgia", serif;
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        padding: 20px;
+      }
+
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 768px) {
+        .upload-section {
+          grid-template-columns: 1fr;
+        }
+
+        .doc-summary {
+          grid-template-columns: 1fr;
+        }
+
+        .content {
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>📄 Document Comparison Tool</h1>
+        <p>Compare PDF documents with advanced text and image analysis</p>
+      </div>
+
+      <div class="content">
+        <div class="upload-section">
+          <div class="file-upload" id="upload1">
+            <div class="icon">📄</div>
+            <label for="file1">
+              Click to select Document 1
+              <br /><small>or drag and drop PDF file here</small>
+            </label>
+            <input type="file" id="file1" accept=".pdf" />
+            <div class="file-info" id="info1"></div>
+          </div>
+
+          <div class="file-upload" id="upload2">
+            <div class="icon">📄</div>
+            <label for="file2">
+              Click to select Document 2
+              <br /><small>or drag and drop PDF file here</small>
+            </label>
+            <input type="file" id="file2" accept=".pdf" />
+            <div class="file-info" id="info2"></div>
+          </div>
+        </div>
+
+        <div class="buttons">
+          <button class="btn" id="uploadBtn" disabled>Upload Files</button>
+          <button class="btn" id="compareBtn" disabled>
+            Compare Documents
+          </button>
+          <button class="btn btn-secondary" id="cleanupBtn">Clear Files</button>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <p>Processing documents... This may take a few minutes.</p>
+        </div>
+
+        <div class="results" id="results">
+          <div class="results-header">
+            <h2>📊 Comparison Results</h2>
+          </div>
+          <div class="results-content">
+            <div class="doc-summary" id="docSummary"></div>
+            <div class="comparison-text" id="comparisonText"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let uploadedFiles = { file1: null, file2: null };
+
+      // File upload handling
+      document
+        .getElementById("file1")
+        .addEventListener("change", handleFileSelect);
+      document
+        .getElementById("file2")
+        .addEventListener("change", handleFileSelect);
+
+      // Drag and drop handling
+      ["upload1", "upload2"].forEach((id) => {
+        const element = document.getElementById(id);
+
+        element.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          element.classList.add("dragover");
+        });
+
+        element.addEventListener("dragleave", () => {
+          element.classList.remove("dragover");
+        });
+
+        element.addEventListener("drop", (e) => {
+          e.preventDefault();
+          element.classList.remove("dragover");
+
+          const fileInput = element.querySelector('input[type="file"]');
+          const files = e.dataTransfer.files;
+          if (files.length > 0 && files[0].type === "application/pdf") {
+            fileInput.files = files;
+            handleFileSelect({ target: fileInput });
+          }
+        });
+      });
+
+      function handleFileSelect(event) {
+        const file = event.target.files[0];
+        const fileId = event.target.id;
+        const infoId = fileId === "file1" ? "info1" : "info2";
+        const infoElement = document.getElementById(infoId);
+
+        if (file) {
+          infoElement.innerHTML = `
+                    <strong>${file.name}</strong><br>
+                    Size: ${(file.size / 1024 / 1024).toFixed(2)} MB
+                `;
+          infoElement.style.display = "block";
+
+          uploadedFiles[fileId] = file;
+        } else {
+          infoElement.style.display = "none";
+          uploadedFiles[fileId] = null;
+        }
+
+        updateButtons();
+      }
+
+      function updateButtons() {
+        const uploadBtn = document.getElementById("uploadBtn");
+        const compareBtn = document.getElementById("compareBtn");
+
+        const bothFilesSelected = uploadedFiles.file1 && uploadedFiles.file2;
+        uploadBtn.disabled = !bothFilesSelected;
+
+        // Enable compare button only after files are uploaded
+        compareBtn.disabled = !uploadBtn.dataset.uploaded;
+      }
+
+      function showStatus(message, type) {
+        const status = document.getElementById("status");
+        status.textContent = message;
+        status.className = `status ${type}`;
+        status.style.display = "block";
+      }
+
+      function hideStatus() {
+        document.getElementById("status").style.display = "none";
+      }
+
+      function showLoading() {
+        document.getElementById("loading").style.display = "block";
+      }
+
+      function hideLoading() {
+        document.getElementById("loading").style.display = "none";
+      }
+
+      // Upload files
+      document
+        .getElementById("uploadBtn")
+        .addEventListener("click", async () => {
+          const formData = new FormData();
+          formData.append("file1", uploadedFiles.file1);
+          formData.append("file2", uploadedFiles.file2);
+
+          showLoading();
+          hideStatus();
+
+          try {
+            const response = await fetch("/upload", {
+              method: "POST",
+              body: formData,
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              showStatus(result.message, "success");
+              document.getElementById("uploadBtn").dataset.uploaded = "true";
+              updateButtons();
+            } else {
+              showStatus(result.error, "error");
+            }
+          } catch (error) {
+            showStatus("Upload failed: " + error.message, "error");
+          } finally {
+            hideLoading();
+          }
+        });
+
+      // Compare documents
+      document
+        .getElementById("compareBtn")
+        .addEventListener("click", async () => {
+          showLoading();
+          hideStatus();
+          document.getElementById("results").style.display = "none";
+
+          try {
+            const response = await fetch("/compare", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                file1: uploadedFiles.file1.name,
+                file2: uploadedFiles.file2.name,
+              }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              showStatus("Comparison completed successfully!", "success");
+              displayResults(result);
+            } else {
+              showStatus(result.error, "error");
+            }
+          } catch (error) {
+            showStatus("Comparison failed: " + error.message, "error");
+          } finally {
+            hideLoading();
+          }
+        });
+
+      // Display results
+      function displayResults(result) {
+        const summaryElement = document.getElementById("docSummary");
+        const comparisonElement = document.getElementById("comparisonText");
+
+        summaryElement.innerHTML = `
+                <div class="summary-card">
+                    <h3>Document 1</h3>
+                    <p>Text sections: ${result.doc1_summary.text_sections}</p>
+                    <p>Images: ${result.doc1_summary.images}</p>
+                </div>
+                <div class="summary-card">
+                    <h3>Document 2</h3>
+                    <p>Text sections: ${result.doc2_summary.text_sections}</p>
+                    <p>Images: ${result.doc2_summary.images}</p>
+                </div>
+            `;
+
+        comparisonElement.textContent = result.comparison;
+        document.getElementById("results").style.display = "block";
+      }
+
+      // Cleanup files
+      document
+        .getElementById("cleanupBtn")
+        .addEventListener("click", async () => {
+          try {
+            const response = await fetch("/cleanup", {
+              method: "POST",
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              showStatus(result.message, "info");
+
+              // Reset form
+              document.getElementById("file1").value = "";
+              document.getElementById("file2").value = "";
+              document.getElementById("info1").style.display = "none";
+              document.getElementById("info2").style.display = "none";
+              document.getElementById("results").style.display = "none";
+
+              uploadedFiles = { file1: null, file2: null };
+              document.getElementById("uploadBtn").dataset.uploaded = "";
+              updateButtons();
+            } else {
+              showStatus(result.error, "error");
+            }
+          } catch (error) {
+            showStatus("Cleanup failed: " + error.message, "error");
+          }
+        });
+    </script>
+  </body>
+</html>
