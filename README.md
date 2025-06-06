@@ -1,4 +1,4 @@
-# PDF Document Comparison Tool
+# PDF Document Comparison 
 
 A Flask-based web application that compares two PDF documents by extracting text and images, analyzing visual content using AI, and providing comprehensive comparison reports.
 
