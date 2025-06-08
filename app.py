@@ -9,6 +9,8 @@ import json
 from werkzeug.utils import secure_filename
 import tempfile
 import shutil
+import numpy as np # <-- ADDED: For numerical operations
+from numpy.linalg import norm # <-- ADDED: For calculating vector norm
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -22,10 +24,18 @@ ALLOWED_EXTENSIONS = {'pdf'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 class DocumentProcessor:
-    def __init__(self, moondream_url="http://localhost:11434", ollama_url="http://localhost:11434"):
-        self.moondream_url = moondream_url
+    # --- MODIFIED: Added model names as parameters ---
+    def __init__(self, 
+                 ollama_url="http://localhost:11434", 
+                 vision_model="moondream",
+                 llm_model="hf.co/unsloth/gemma-3-4b-it-GGUF:Q4_K_M",
+                 embedding_model="hf.co/Qwen/Qwen3-Embedding-0.6B-GGUF:Q8_0"):
         self.ollama_url = ollama_url
+        self.vision_model = vision_model
+        self.llm_model = llm_model
+        self.embedding_model = embedding_model
     
     def extract_text_and_images(self, pdf_path):
         """Extract text and images from PDF using PyMuPDF"""
@@ -71,14 +81,14 @@ class DocumentProcessor:
         """Generate caption for image using Moondream via Ollama"""
         try:
             payload = {
-                "model": "moondream",
+                "model": self.vision_model,
                 "prompt": "Describe this image in detail.",
                 "images": [image_data],
                 "stream": False
             }
             
-            response = requests.post(f"{self.moondream_url}/api/generate", 
-                                   json=payload, timeout=30)
+            response = requests.post(f"{self.ollama_url}/api/generate", 
+                                     json=payload, timeout=30)
             
             if response.status_code == 200:
                 return response.json().get('response', 'No caption generated')
@@ -86,20 +96,20 @@ class DocumentProcessor:
                 return f"Error generating caption: {response.status_code}"
                 
         except Exception as e:
-            return f"Error connecting to Moondream: {str(e)}"
+            return f"Error connecting to Vision Model: {str(e)}"
     
     def ocr_image(self, image_data):
         """Extract text from image using Moondream OCR"""
         try:
             payload = {
-                "model": "moondream",
+                "model": self.vision_model,
                 "prompt": "Extract all text from this image. If there's no text, respond with 'No text found'.",
                 "images": [image_data],
                 "stream": False
             }
             
-            response = requests.post(f"{self.moondream_url}/api/generate", 
-                                   json=payload, timeout=30)
+            response = requests.post(f"{self.ollama_url}/api/generate", 
+                                     json=payload, timeout=30)
             
             if response.status_code == 200:
                 return response.json().get('response', 'No text extracted')
@@ -107,13 +117,13 @@ class DocumentProcessor:
                 return f"Error extracting text: {response.status_code}"
                 
         except Exception as e:
-            return f"Error connecting to Moondream: {str(e)}"
+            return f"Error connecting to Vision Model: {str(e)}"
     
     def process_pdf(self, pdf_path):
         """Process PDF to extract and analyze all content"""
         text_sections, images = self.extract_text_and_images(pdf_path)
         
-        # Process images with Moondream
+        # Process images
         image_data = []
         for img in images:
             print(f"Processing image from page {img['page']}")
@@ -131,20 +141,16 @@ class DocumentProcessor:
         return {'text': text_sections, 'images': image_data}
     
     def combine_content(self, doc):
-        """Combine text and image information into a single structure"""
+        """Combine text and image information into a single string"""
         combined = []
-        
-        # Group content by page
         pages = {}
         
-        # Add text sections
         for section in doc['text']:
             page_num = section['page']
             if page_num not in pages:
                 pages[page_num] = {'text': [], 'images': []}
             pages[page_num]['text'].append(section['text'])
         
-        # Add image information
         for img in doc['images']:
             page_num = img['page']
             if page_num not in pages:
@@ -153,15 +159,12 @@ class DocumentProcessor:
             img_info = f"[IMAGE] Caption: {img['caption']}\n[IMAGE] OCR Text: {img['ocr_text']}"
             pages[page_num]['images'].append(img_info)
         
-        # Combine all content in page order
         for page_num in sorted(pages.keys()):
             page_content = f"\n--- Page {page_num} ---\n"
             
-            # Add text content
             if pages[page_num]['text']:
                 page_content += "\n".join(pages[page_num]['text'])
             
-            # Add image information
             if pages[page_num]['images']:
                 page_content += "\n" + "\n".join(pages[page_num]['images'])
             
@@ -169,10 +172,49 @@ class DocumentProcessor:
         
         return "\n\n".join(combined)
     
-    def compare_documents(self, content1, content2):
-        """Compare two documents using Ollama LLM"""
+    # --- NEW FUNCTION: To generate embeddings ---
+    def generate_embedding(self, content):
+        """Generate embedding for a given content using Ollama."""
         try:
-            prompt = f"""Perform a comprehensive comparison of the following two documents. Structure the output into the following sections:
+            payload = {
+                "model": self.embedding_model,
+                "prompt": content
+            }
+            response = requests.post(f"{self.ollama_url}/api/embeddings", json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                return response.json().get('embedding')
+            else:
+                print(f"Error generating embedding: {response.status_code} - {response.text}")
+                return None
+        except Exception as e:
+            print(f"Error connecting to Ollama for embeddings: {str(e)}")
+            return None
+
+    # --- MODIFIED: Function updated to use new model and include embeddings ---
+    def compare_documents(self, content1, content2):
+        """Compare two documents using embeddings and an LLM."""
+        try:
+            # Step 1: Generate embeddings for both documents
+            print(f"Generating embedding for Document 1 with {self.embedding_model}...")
+            embedding1 = self.generate_embedding(content1)
+            
+            print(f"Generating embedding for Document 2 with {self.embedding_model}...")
+            embedding2 = self.generate_embedding(content2)
+
+            similarity_score = 0
+            if embedding1 and embedding2:
+                # Step 2: Calculate cosine similarity
+                vec1 = np.array(embedding1)
+                vec2 = np.array(embedding2)
+                similarity_score = np.dot(vec1, vec2) / (norm(vec1) * norm(vec2))
+                print(f"Calculated Cosine Similarity: {similarity_score:.4f}")
+            
+            # Step 3: Create a detailed prompt for the LLM, including the similarity score
+            prompt = f"""You are an expert document analyst.
+Overall Semantic Similarity Score: {similarity_score:.4f} (A score closer to 1.0 means more similar).
+
+Perform a comprehensive comparison of the following two documents based on this score and their content. Structure the output into the following sections:
 
 1. **Similarities**: 
    - Clearly list all identical or unchanged elements between Document 1 and Document 2. This includes matching text, identical image descriptions, and any structural elements that remain the same. 
@@ -207,22 +249,30 @@ Document 2:
 
 Provide a detailed comparison report."""
 
+            # Step 4: Call the LLM with the prompt
             payload = {
-                "model": "llama3.2",  # or your preferred model
+                "model": self.llm_model,  # <-- MODIFIED: Using the specified Gemma model
                 "prompt": prompt,
                 "stream": False
             }
             
+            print(f"Sending comparison request to {self.llm_model}...")
             response = requests.post(f"{self.ollama_url}/api/generate", 
-                                   json=payload, timeout=120)
+                                     json=payload, timeout=180) # Increased timeout for larger models
             
             if response.status_code == 200:
-                return response.json().get('response', 'No comparison generated')
+                # Return both the LLM response and the similarity score
+                return {
+                    'comparison_report': response.json().get('response', 'No comparison generated'),
+                    'similarity_score': similarity_score
+                }
             else:
-                return f"Error comparing documents: {response.status_code}"
+                error_message = f"Error comparing documents: {response.status_code} - {response.text}"
+                return {'error': error_message}
                 
         except Exception as e:
-            return f"Error connecting to Ollama: {str(e)}"
+            return {'error': f"Error connecting to Ollama: {str(e)}"}
+
 
 # Initialize processor
 processor = DocumentProcessor()
@@ -267,7 +317,7 @@ def upload_files():
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
 @app.route('/compare', methods=['POST'])
-def compare_documents():
+def compare_documents_route(): # Renamed function to avoid conflict
     data = request.get_json()
     file1 = data.get('file1')
     file2 = data.get('file2')
@@ -294,12 +344,17 @@ def compare_documents():
         content2 = processor.combine_content(doc2)
         
         # Compare documents
-        print("Comparing documents...")
+        print("Comparing documents with embeddings and LLM...")
         comparison_result = processor.compare_documents(content1, content2)
         
+        # --- MODIFIED: Handle the new response structure ---
+        if 'error' in comparison_result:
+             return jsonify({'error': comparison_result['error']}), 500
+
         return jsonify({
             'success': True,
-            'comparison': comparison_result,
+            'comparison': comparison_result['comparison_report'],
+            'similarity': f"{comparison_result['similarity_score']:.4f}", # Format score for display
             'doc1_summary': {
                 'text_sections': len(doc1['text']),
                 'images': len(doc1['images'])
@@ -317,14 +372,16 @@ def compare_documents():
 def cleanup():
     """Clean up uploaded files"""
     try:
-        for filename in os.listdir(app.config['UPLOAD_FOLDER']):
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            if os.path.isfile(file_path):
+        folder = app.config['UPLOAD_FOLDER']
+        for filename in os.listdir(folder):
+            file_path = os.path.join(folder, filename)
+            if os.path.isfile(file_path) or os.path.islink(file_path):
                 os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
         return jsonify({'success': True, 'message': 'Files cleaned up'})
     except Exception as e:
         return jsonify({'error': f'Cleanup failed: {str(e)}'}), 500
 
 if __name__ == '__main__':
-     app.run(debug=True)
-     
+    app.run(debug=True, port=5000)

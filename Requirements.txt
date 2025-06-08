@@ -1,0 +1,15 @@
+# Core Flask Framework
+Flask==2.3.3
+Werkzeug==2.3.7
+
+# PDF Processing
+PyMuPDF==1.23.14
+
+# Image Processing
+Pillow==10.0.1
+
+# HTTP Requests for Ollama API
+requests==2.31.0
+
+# Numerical Operations and Vector Math
+numpy==1.24.3
